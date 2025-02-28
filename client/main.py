@@ -8,7 +8,7 @@ import os
 import re
 from res.style.styles import SEND_BUTTON_STYLE, CONNECT_BUTTON_STYLE
 import threading
-
+import time
 
 from chardet.universaldetector import UniversalDetector
 
@@ -18,6 +18,7 @@ class MainWindow(tk.Tk):
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.file_data_dict = {}
         self.title("ipClient")
         self.geometry("800x700")
         self.resizable(False, False)
@@ -119,8 +120,8 @@ class MainWindow(tk.Tk):
     def download_file_thread(self, filename, save_path):
         try:
             self.show_progress_bar()
-            self.client_socket.send(f"DOWNLOAD {filename}\r\n".encode())
-            file_size = int(self.client_socket.recv(1024).decode().strip())
+            self.client_socket.send(f"DOWNLOAD {filename.split()[0]}\r\n".encode())
+            #file_size = int(self.client_socket.recv(1024).decode().strip())
 
             received_size = 0
             self.progress_bar["maximum"] = file_size
@@ -131,6 +132,7 @@ class MainWindow(tk.Tk):
                     if not chunk:
                         break
                     file.write(chunk)
+                    print(chunk)
                     received_size += len(chunk)
                     self.progress_bar["value"] = received_size
                     self.update_idletasks()
@@ -178,7 +180,7 @@ class MainWindow(tk.Tk):
 
     def get_file_list(self):
         try:
-            self.client_socket.send("GET_FILES\r\n".encode())  # Запрашиваем список файлов
+            self.client_socket.send("DOCS_LIST\r\n".encode())  # Запрашиваем список файлов
             file_data = self.client_socket.recv(1024).decode()  # Получаем данные от сервера
 
             if not file_data:
@@ -198,7 +200,7 @@ class MainWindow(tk.Tk):
         self.chat_display.yview("end")
 
 
-    def format_file_size(size_in_bytes):
+    def format_file_size(self, size_in_bytes):
         if size_in_bytes < 1024:
             return f"{size_in_bytes} Б"
         elif size_in_bytes < 1024**2:
@@ -212,7 +214,7 @@ class MainWindow(tk.Tk):
     # сервер присылает строки "file1.txt 1234"
     #                         "file2.txt 3245" размер в байтах
     def update_file_list(self, file_data):
-        files = file_data.split("\n") 
+        files = file_data.split("\r\n") 
         self.file_listbox.delete(0, "end")  
 
         for file in files:
@@ -220,9 +222,10 @@ class MainWindow(tk.Tk):
                 file_info = file.split()  
                 if len(file_info) == 2:
                     file_name, file_size = file_info
+                    print(file_info)
                     try:
                         file_size = int(file_size)  
-                        formatted_size = format_file_size(file_size)  
+                        formatted_size = self.format_file_size(file_size)  
                         display_text = f"{file_name} ({formatted_size})"
                         self.file_listbox.insert("end", display_text)  
                     except ValueError:
@@ -240,8 +243,9 @@ class MainWindow(tk.Tk):
 
         try:
             self.client_socket.send((message + "\r\n").encode())
+            print("Жду ответ")
             response = self.client_socket.recv(1024).decode()
-
+            print("ответ пришел")
             self.update_chat(f"Вы: {message}")
             self.update_chat(f"Сервер: {response}")
 
@@ -271,13 +275,14 @@ class MainWindow(tk.Tk):
             file_size = os.path.getsize(file_path)
 
             self.client_socket.send(f"UPLOAD {file_name} {file_size}\r\n".encode())
-
+            time.sleep(1)
             sent_size = 0
             self.progress_bar["maximum"] = file_size
 
             with open(file_path, "rb") as file:
                 while chunk := file.read(1024):
                     self.client_socket.send(chunk)
+                    print(chunk)
                     sent_size += len(chunk)
                     self.progress_bar["value"] = sent_size
                     self.update_idletasks()
